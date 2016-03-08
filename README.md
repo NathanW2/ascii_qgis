@@ -1,6 +1,8 @@
 #What the heck is this?
 A ASCII map thingo for QGIS projects
 
+![](https://raw.githubusercontent.com/NathanW2/ascii_qgis/gh-pages/images/demoimage.png)
+
 # How do I run it
 - Edit the paths in the .config file
 - Run ascii_qgis.py

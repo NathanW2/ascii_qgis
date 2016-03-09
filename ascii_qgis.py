@@ -263,6 +263,8 @@ def toggle_ascii_mode():
 def toggle_color_mode():
     global color_mode_enabled
     color_mode_enabled = not color_mode_enabled
+    global ascii_mode_enabled
+    ascii_mode_enabled = not color_mode_enabled
     mapwindow.render_map()
 
 @command()
@@ -630,6 +632,8 @@ def main(screen):
         func = cmd()
         if not func:
             update_cmd_status(entercommandstr)
+            edit.clear()
+            edit.refresh()
             continue
 
         try:
@@ -640,9 +644,11 @@ def main(screen):
                 message = pad.edit(validate=handle_key_event).strip()
                 qanda = func.send(message)
         except StopIteration:
-            edit.clear()
-            edit.refresh()
-            update_cmd_status(entercommandstr)
+            pass
+
+        update_cmd_status(entercommandstr)
+        edit.clear()
+        edit.refresh()
 
 app = QGIS.init(guienabled=False)
 

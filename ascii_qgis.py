@@ -6,7 +6,8 @@ import sys
 import json
 from collections import namedtuple
 from curses.textpad import Textbox, rectangle
-from qgis.core import QgsMapLayerRegistry, QgsProject, QgsMapRendererParallelJob, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsRectangle, QgsPoint, QgsMapSettings
+from qgis.core import QgsMapLayerRegistry, QgsProject, QgsMapRendererParallelJob, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsRectangle, QgsPoint, QgsMapSettings, \
+    QgsMapLayer, QGis
 from qgis.gui import QgsMapCanvas, QgsLayerTreeMapCanvasBridge
 from PyQt4.QtCore import QSize
 from PyQt4.QtGui import QColor, QImage
@@ -131,7 +132,6 @@ def show_commands():
 
 def show_help():
     abouttxt = """
-
     YAY ASCII!
 
     Type commands into the bottom
@@ -153,7 +153,11 @@ def show_help():
     CTRL + PAGE UP - Zoom In
     CTRL + PAGE DOWN - Zoom Out
 
-    """
+    Details:
+
+    Running QGIS Version: {}
+
+    """.format(QGis.QGIS_VERSION)
     aboutwindow.display(title="Help - ESC to close", content=abouttxt)
     aboutwindow.hide()
     mapwindow.render_map()
@@ -203,6 +207,7 @@ def _resolve_project_path(name):
 def _open_project(fullpath):
     global project
     project = projects.open_project(fullpath)
+    return project
 
 
 def open_project():
@@ -274,6 +279,90 @@ def get_pixel_value(pixels, x, y):
     except IndexError:
         return " ", pair
 
+def get_char(pixels, x, y, geometrytype):
+    codes = [
+        '@',
+        '-',
+        '#',
+        ' ',
+        ' '
+    ]
+
+    color = QColor(pixels.pixel(x, y))
+    if color == QColor(0, 0, 0):
+        return codes[geometrytype]
+    else:
+        return ' '
+
+def stack(layers, fill=(' ', 0)):
+    """
+    Stack a bunch of arrays and return a single array.
+    :param layers:
+    :param fill:
+    :return:
+    """
+    output_array = []
+    for row_stack in zip(*layers):
+        o_row = []
+        for pixel_stack in zip(*row_stack):
+            opaque_pixels = [_p for _p in pixel_stack if _p[0] != ' ']
+            if len(opaque_pixels) is 0:
+                o_row.append(fill)
+            else:
+                o_row.append(opaque_pixels[-1])
+        output_array.append(o_row)
+    return output_array
+
+def generate_layers_ascii(setttings, width, height):
+    codes = [
+        '@',
+        '.',
+        '#',
+        ' ',
+        ' '
+    ]
+    # Should only do visible ones but meh
+    import itertools
+    colors = itertools.cycle(range(11, curses.COLORS - 10))
+
+    layersdata = []
+    root = QgsProject.instance().layerTreeRoot()
+    layers = [node.layer() for node in root.findLayers()]
+    layers = reversed(layers)
+    for layer in layers:
+        if not layer.type() == QgsMapLayer.VectorLayer:
+            continue
+
+        colorpair = colors.next()
+        char = codes[layer.geometryType()]
+        logging.info("Using color pair {} for layer {} and char {}".format(colorpair, char, layer.name()))
+        image = render_layer(setttings, layer, width, height)
+        layerdata = []
+        for row in range(1, height - 1):
+            rowdata = []
+            for col in range(1, width - 1):
+                color = QColor(image.pixel(col, row))
+                # All features are black at the moment so just use this.
+                # Might just do non white in the future
+                if not color == QColor(255, 255, 255):
+                    rowdata.append((char, colorpair))
+                else:
+                    rowdata.append((' ', 8))
+            layerdata.append(rowdata)
+        layersdata.append(layerdata)
+    return stack(layersdata)
+
+
+def render_layer(settings, layer, width, height):
+    settings.setLayers([layer.id()])
+    settings.setFlags(settings.flags() ^ QgsMapSettings.Antialiasing)
+    settings.setOutputSize(QSize(width, height))
+    job = QgsMapRendererParallelJob(settings)
+    job.start()
+    job.waitForFinished()
+    image = job.renderedImage()
+    image.save(r"/media/nathan/Data/dev/qgis-term/{}.jpg".format(layer.name()))
+    return image
 
 class Map():
     def __init__(self):
@@ -291,14 +380,23 @@ class Map():
 
         height, width = self.mapwin.getmaxyx()
         # Only render the image if we have a open project
+        if not self.settings and project:
+            self.settings = project.map_settings
+
         if project:
-            img = self.render_qgis_map()
-            for row in range(1, height - 1):
-                for col in range(1, width - 1):
-                    value, color = get_pixel_value(img, col, row)
-                    # + 10 is the map color pair offset
-                    # Finding a closer colour match would be nicer
-                    self.mapwin.addstr(row, col, value, color)
+            settings = self.settings
+            data = generate_layers_ascii(self.settings, width, height)
+            for row, rowdata in enumerate(data):
+                for col, celldata in enumerate(rowdata):
+                    value, color = celldata[0], celldata[1]
+                    if value == ' ':
+                        color = 8
+                    if not ascii_mode_enabled:
+                        value = ' '
+                    # else:
+                    #     color = 0
+                    self.mapwin.addstr(row + 1, col + 1, value, curses.color_pair(color))
+
         self.mapwin.refresh()
 
     def render_qgis_map(self):
@@ -449,6 +547,7 @@ def init_colors():
     curses.init_pair(5, curses.COLOR_GREEN, curses.COLOR_BLACK)
     curses.init_pair(6, curses.COLOR_BLACK, curses.COLOR_WHITE)
     curses.init_pair(7, curses.COLOR_RED, curses.COLOR_BLACK)
+    curses.init_pair(8, curses.COLOR_WHITE, curses.COLOR_WHITE)
     colors['white'] = curses.color_pair(1)
     colors['green'] = curses.color_pair(2)
     colors['cyan'] = curses.color_pair(3)
@@ -456,6 +555,7 @@ def init_colors():
     colors['green-black'] = curses.color_pair(5)
     colors['black-white'] = curses.color_pair(6)
     colors['red'] = curses.color_pair(7)
+    colors['white-white'] = curses.color_pair(8)
 
     # Allocate colour ranges here for the ma display.
     maprange = 10

@@ -279,21 +279,6 @@ def get_pixel_value(pixels, x, y):
     except IndexError:
         return " ", pair
 
-def get_char(pixels, x, y, geometrytype):
-    codes = [
-        '@',
-        '-',
-        '#',
-        ' ',
-        ' '
-    ]
-
-    color = QColor(pixels.pixel(x, y))
-    if color == QColor(0, 0, 0):
-        return codes[geometrytype]
-    else:
-        return ' '
-
 def stack(layers, fill=(' ', 0)):
     """
     Stack a bunch of arrays and return a single array.
@@ -346,7 +331,9 @@ def generate_layers_ascii(setttings, width, height):
                 # Might just do non white in the future
                 if not color == QColor(255, 255, 255):
                     rowdata.append((char, colorpair))
+                    rowdata.append((char, colorpair))
                 else:
+                    rowdata.append((' ', 8))
                     rowdata.append((' ', 8))
             layerdata.append(rowdata)
         layersdata.append(layerdata)
@@ -387,7 +374,13 @@ class Map():
             settings = self.settings
             data = generate_layers_ascii(self.settings, width, height)
             for row, rowdata in enumerate(data):
+                if row + 1 >= height:
+                    break
+
                 for col, celldata in enumerate(rowdata):
+                    if col + 1 >= width:
+                        break
+
                     value, color = celldata[0], celldata[1]
                     if value == ' ':
                         color = 8

@@ -30,11 +30,17 @@ mapwindow = None
 canvas = None
 lastcmd = ''
 
-class QuestionTypes:
+
+class QAndA:
     QUESTION = 3
     QUESTIOnERROR = 4
 
-QAndA = namedtuple("QAndA", ['question', 'type'])
+    def __init__(self, question, type=QUESTION, completions=None):
+        self.question = question
+        self.type = type
+        if not completions:
+            completions = []
+        self.completions = completions
 
 TOPBORDER = 4
 BOTTOMBORDER = 2
@@ -238,15 +244,15 @@ def _open_project(fullpath):
 
 @command(names=['load-project'])
 def open_project():
-    project = yield QAndA(question="Which project to open?",type=QuestionTypes.QUESTION)
+    project = yield QAndA(question="Which project to open?", type=QAndA.QUESTION)
     fullpath = _resolve_project_path(project)
     while not _resolve_project_path(project):
-        project = yield QAndA(question="Couldn't find project {}. Check name".format(project), type=QuestionTypes.QUESTIOnERROR)
+        project = yield QAndA(question="Couldn't find project {}. Check name".format(project), type=QAndA.QUESTIOnERROR)
         fullpath = _resolve_project_path(project)
 
-    answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QuestionTypes.QUESTION)
+    answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QAndA.QUESTION)
     while not answer or answer[0].upper() not in ['Y', 'N']:
-        answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QuestionTypes.QUESTIOnERROR)
+        answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QAndA.QUESTIOnERROR)
 
     if answer[0].upper() == "Y":
         _open_project(fullpath)
@@ -269,12 +275,12 @@ def toggle_color_mode():
 
 @command()
 def zoom_out():
-    factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
+    factor = yield QAndA("By how much?", type=QAndA.QUESTION)
     mapwindow.zoom_out(float(factor))
 
 @command()
 def zoom_in():
-    factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
+    factor = yield QAndA("By how much?", type=QAndA.QUESTION)
     mapwindow.zoom_in(float(factor))
 
 

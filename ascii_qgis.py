@@ -1,19 +1,28 @@
 #!/usr/bin/env python
+# coding=utf-8
+
 import curses
 import curses.panel
 import os
 import sys
 import json
 from collections import namedtuple
-from curses.textpad import Textbox, rectangle
-from qgis.core import QgsMapLayerRegistry, QgsProject, QgsMapRendererParallelJob, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsRectangle, QgsPoint, QgsMapSettings
-from qgis.gui import QgsMapCanvas, QgsLayerTreeMapCanvasBridge
+from curses.textpad import Textbox
+from qgis.core import (
+    QgsMapLayerRegistry,
+    QgsProject,
+    QgsMapRendererParallelJob,
+    QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
+    QgsRectangle,
+    QgsPoint,
+    QgsMapSettings)
 from PyQt4.QtCore import QSize
-from PyQt4.QtGui import QColor, QImage
+from PyQt4.QtGui import QColor
 from parfait import QGIS, projects
 
 import logging
-logging.basicConfig(filename='render.log',level=logging.DEBUG)
+logging.basicConfig(filename='render.log', level=logging.DEBUG)
 
 # Bunch of good old globals......for now
 scr = None
@@ -21,26 +30,30 @@ project = None
 status = None
 edit = None
 pad = None
-legendwindow = None
+legend_window = None
 ascii_mode_enabled = False
-aboutwindow = None
-mapwindow = None
+about_window = None
+map_window = None
 canvas = None
-lastcmd = ''
+last_command = ''
+
 
 class QuestionTypes:
+    def __init__(self):
+        pass
+
     QUESTION = 3
     QUESTIOnERROR = 4
 
 QAndA = namedtuple("QAndA", ['question', 'type'])
 
-TOPBORDER = 4
-BOTTOMBORDER = 2
+TOP_BORDER = 4
+BOTTOM_BORDER = 2
 
 config = {}
 
 
-class AboutWindow():
+class AboutWindow:
     def __init__(self):
         y, x = scr.getmaxyx()
         self.infowin = curses.newwin(y / 2, x / 2, y / 4, x / 4)
@@ -49,7 +62,7 @@ class AboutWindow():
     def display(self, title, content):
         curses.curs_set(0)
         self.infowin.clear()
-        y, x = self.infowin.getmaxyx()
+        #  y, x = self.infowin.getmaxyx()
         self.infowin.bkgd(" ", curses.color_pair(6))
         self.infowin.box()
         self.infowin.addstr(0, 0, title, curses.A_UNDERLINE | curses.A_BOLD)
@@ -69,19 +82,19 @@ class AboutWindow():
         curses.doupdate()
 
 
-class Legend():
+class Legend:
     def __init__(self):
         y, x = scr.getmaxyx()
-        self.win = curses.newwin(y - TOPBORDER, 30, BOTTOMBORDER, 0)
+        self.win = curses.newwin(y - TOP_BORDER, 30, BOTTOM_BORDER, 0)
 
     def render_legend(self):
         def render_item(node, row, col):
-            nodestr = str(node)
+            node_text = str(node)
 
             if isinstance(node, QgsLayerTreeLayer):
-                nodestr = "(L) " + node.layerName()
+                node_text = "(L) " + node.layerName()
             if isinstance(node, QgsLayerTreeGroup):
-                nodestr = "(G) " + node.name()
+                node_text = "(G) " + node.name()
 
             state = "[ ]"
             if node.isVisible():
@@ -91,7 +104,7 @@ class Legend():
             if node.isExpanded():
                 expanded = '-'
 
-            name = "{} {} {}".format(expanded, state, nodestr)
+            name = "{} {} {}".format(expanded, state, node_text)
 
             y, maxsize = self.win.getmaxyx()
             logging.info(name)
@@ -111,24 +124,25 @@ class Legend():
         self.win.box()
         self.win.addstr(0, size / 2, "Layers")
         # Only top level for now
-        root = QgsProject.instance().layerTreeRoot()
-        row = 1
-        col = 1
-        render_nodes(root, row, col)
+        layer_tree_root = QgsProject.instance().layerTreeRoot()
+        start_row = 1
+        start_col = 1
+        render_nodes(layer_tree_root, start_row, start_col)
         self.win.refresh()
+
 
 def show_commands():
     cmds = "\n".join(commands)
-    aboutwindow.display(title="Commands - ESC to close", content=cmds)
-    aboutwindow.hide()
-    mapwindow.render_map()
-    legendwindow.render_legend()
+    about_window.display(title="Commands - ESC to close", content=cmds)
+    about_window.hide()
+    map_window.render_map()
+    legend_window.render_legend()
     edit.clear()
     edit.refresh()
 
-def show_help():
-    abouttxt = """
 
+def show_help():
+    about_text = """
     YAY ASCII!
 
     Type commands into the bottom
@@ -137,12 +151,18 @@ def show_help():
     Try something like open-project
     which can take a name
     of a project or a path.
-    (Config the paths in ascii_qgis.config
+    (Config the paths in ascii_qgis.config)
 
     Once a project is loaded you can
     use these to move the map around
 
     CTRL + UP - Pan Up
+    """
+
+    # Does not run on OSX with these lintes enabled
+    # I think because on insufficient space in window or something
+
+    _ = """
     CTRL + DOWN - Pan Down
     CTRL + LEFT - Pan Left
     CTRL + RIGHT - Pan Right
@@ -151,15 +171,16 @@ def show_help():
     CTRL + PAGE DOWN - Zoom Out
 
     """
-    aboutwindow.display(title="Help - ESC to close", content=abouttxt)
-    aboutwindow.hide()
-    mapwindow.render_map()
-    legendwindow.render_legend()
+    about_window.display(title="Help - ESC to close", content=about_text)
+    about_window.hide()
+    map_window.render_map()
+    legend_window.render_legend()
     edit.clear()
     edit.refresh()
 
+
 def show_about():
-    abouttxt = """
+    about_text = """
     > What the heck is this?
     A ASCII map thingo for QGIS projects
 
@@ -175,25 +196,27 @@ def show_about():
     > Really?
     Yes indeed because ASCII!
     """
-    aboutwindow.display(title="FAQ - ESC to close", content=abouttxt)
-    aboutwindow.hide()
-    mapwindow.render_map()
-    legendwindow.render_legend()
+    about_window.display(title="FAQ - ESC to close", content=about_text)
+    about_window.hide()
+    map_window.render_map()
+    legend_window.render_legend()
     edit.clear()
     edit.refresh()
+
 
 def _exit():
     curses.endwin()
     sys.exit()
 
+
 def _resolve_project_path(name):
     for path in config['paths']:
         if not name.endswith(".qgs"):
-            name = name + ".qgs"
+            name += ".qgs"
 
-        fullpath = os.path.join(path, name)
-        if os.path.exists(fullpath):
-            return fullpath
+        full_path = os.path.join(path, name)
+        if os.path.exists(full_path):
+            return full_path
     return None
 
 
@@ -203,40 +226,56 @@ def _open_project(fullpath):
 
 
 def open_project():
-    project = yield QAndA(question="Which project to open?",type=QuestionTypes.QUESTION)
-    fullpath = _resolve_project_path(project)
+    global project
+    project = yield QAndA(
+        question="Which project to open?",
+        type=QuestionTypes.QUESTION)
+    full_path = _resolve_project_path(project)
     while not _resolve_project_path(project):
-        project = yield QAndA(question="Couldn't find project {}. Check name".format(project), type=QuestionTypes.QUESTIOnERROR)
-        fullpath = _resolve_project_path(project)
+        project = yield QAndA(
+            question="Couldn't find project {}. Check name".format(project),
+            type=QuestionTypes.QUESTIOnERROR)
+        full_path = _resolve_project_path(project)
 
-    answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QuestionTypes.QUESTION)
+    answer = yield QAndA(
+        question="Really load ({}) | Y/N ".format(full_path),
+        type=QuestionTypes.QUESTION)
     while not answer or answer[0].upper() not in ['Y', 'N']:
-        answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QuestionTypes.QUESTIOnERROR)
+        answer = yield QAndA(
+            question="Really load ({}) | Y/N ".format(full_path),
+            type=QuestionTypes.QUESTIOnERROR)
 
     if answer[0].upper() == "Y":
-        _open_project(fullpath)
-        legendwindow.render_legend()
-        mapwindow.render_map()
+        _open_project(full_path)
+        legend_window.render_legend()
+        map_window.render_map()
+
 
 def ascii_mode():
-    answer = yield QAndA("Enable ascii rendering mode? Y/N", type=QuestionTypes.QUESTION)
+    answer = yield QAndA(
+        "Enable ascii rendering mode? Y/N",
+        type=QuestionTypes.QUESTION)
     while not answer or answer[0].upper() not in ['Y', 'N']:
-        answer = yield QAndA("Enable ascii rendering mode? Y/N", type=QuestionTypes.QUESTION)
+        answer = yield QAndA(
+            "Enable ascii rendering mode? Y/N",
+            type=QuestionTypes.QUESTION)
 
     global ascii_mode_enabled
     if answer.upper() == "Y":
         ascii_mode_enabled = True
     else:
         ascii_mode_enabled = False
-    mapwindow.render_map()
+    map_window.render_map()
+
 
 def zoom_out():
     factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
-    mapwindow.zoom_out(float(factor))
+    map_window.zoom_out(float(factor))
+
 
 def zoom_in():
     factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
-    mapwindow.zoom_in(float(factor))
+    map_window.zoom_in(float(factor))
 
 
 commands = {
@@ -271,10 +310,10 @@ def get_pixel_value(pixels, x, y):
         return " ", pair
 
 
-class Map():
+class Map:
     def __init__(self):
         y, x = scr.getmaxyx()
-        self.mapwin = curses.newwin(y - TOPBORDER, x - 30, BOTTOMBORDER, 30)
+        self.mapwin = curses.newwin(y - TOP_BORDER, x - 30, BOTTOM_BORDER, 30)
         self.settings = None
 
     def render_map(self):
@@ -304,8 +343,10 @@ class Map():
             self.settings = project.map_settings
 
         # TODO We should only get visible layers here but this will do for now
-        self.settings.setLayers(QgsMapLayerRegistry.instance().mapLayers().keys())
-        self.settings.setFlags(self.settings.flags() ^ QgsMapSettings.Antialiasing)
+        self.settings.setLayers(
+                QgsMapLayerRegistry.instance().mapLayers().keys())
+        self.settings.setFlags(
+                self.settings.flags() ^ QgsMapSettings.Antialiasing)
         logging.info(self.settings.flags())
         logging.info(self.settings.testFlag(QgsMapSettings.Antialiasing))
         height, width = self.mapwin.getmaxyx()
@@ -339,10 +380,11 @@ class Map():
         if not self.settings:
             return
 
-        def setCenter(point):
+        def set_center(point):
             x, y = point.x(), point.y()
-            rect = QgsRectangle(x - extent.width() / 2.0, y - extent.height() / 2.0,
-                                x + extent.width() / 2.0, y + extent.height() / 2.0)
+            rect = QgsRectangle(
+                    x - extent.width() / 2.0, y - extent.height() / 2.0,
+                    x + extent.width() / 2.0, y + extent.height() / 2.0)
             self.settings.setExtent(rect)
             self.render_map()
 
@@ -354,16 +396,16 @@ class Map():
 
         if direction == "up":
             newpoint = QgsPoint(center.x() + 0, center.y() + dy)
-            setCenter(newpoint)
+            set_center(newpoint)
         if direction == "down":
             newpoint = QgsPoint(center.x() - 0, center.y() - dy)
-            setCenter(newpoint)
+            set_center(newpoint)
         if direction == "left":
             newpoint = QgsPoint(center.x() - dx, center.y() - 0)
-            setCenter(newpoint)
+            set_center(newpoint)
         if direction == "right":
             newpoint = QgsPoint(center.x() + dx, center.y() + 0)
-            setCenter(newpoint)
+            set_center(newpoint)
 
 if hasattr(curses, "CTL_UP"):
     UP = curses.CTL_UP
@@ -380,28 +422,29 @@ else:
     PAGEUP = 555
     PAGEDOWN = 550
 
+
 def handle_key_event(event):
     # TAB
     logging.info("Key Event:{}".format(event))
     if event == curses.KEY_UP:
         edit.clear()
-        edit.addstr(0,0, lastcmd)
+        edit.addstr(0, 0, last_command)
         edit.refresh()
 
     if event == UP:
-        mapwindow.pan("up")
+        map_window.pan("up")
     if event == DOWN:
-        mapwindow.pan("down")
+        map_window.pan("down")
     if event == LEFT:
-        mapwindow.pan("left")
+        map_window.pan("left")
     if event == RIGHT:
-        mapwindow.pan("right")
+        map_window.pan("right")
 
     if event == PAGEDOWN:
-        mapwindow.zoom_out(5)
+        map_window.zoom_out(5)
 
     if event == PAGEUP:
-        mapwindow.zoom_in(5)
+        map_window.zoom_in(5)
 
     if event == 9:
         logging.info("Calling auto complete on TAB key")
@@ -410,7 +453,8 @@ def handle_key_event(event):
         logging.info("Options are")
         for cmd, fullname in cmds.iteritems():
             if cmd == data:
-                logging.info("Grabbed the first match which was {}".format(fullname))
+                logging.info(
+                    "Grabbed the first match which was {}".format(fullname))
                 edit.clear()
                 edit.addstr(0, 0, fullname)
                 edit.refresh()
@@ -428,6 +472,7 @@ def update_cmd_status(message, color=None):
 
 colors = {
 }
+
 
 def init_colors():
     """
@@ -471,7 +516,9 @@ def main(screen):
         global config
         config = json.load(f)
 
-    entercommandstr = "Enter command. TAB for auto complete. (command-list for command help or ? for general help)"
+    enter_command_text = (
+        "Enter command. TAB for auto complete. "
+        "(command-list for command help or ? for general help)")
 
     init_colors()
 
@@ -479,23 +526,23 @@ def main(screen):
 
     y, x = screen.getmaxyx()
 
-    global scr, edit, status, pad, aboutwindow, legendwindow, mapwindow
+    global scr, edit, status, pad, about_window, legend_window, map_window
     scr = screen
     edit = curses.newwin(1, x, y - 1, 0)
     status = curses.newwin(1, x, y - 2, 0)
     pad = Textbox(edit, insert_mode=True)
-    mapwindow = Map()
-    legendwindow = Legend()
-    aboutwindow = AboutWindow()
+    map_window = Map()
+    legend_window = Legend()
+    about_window = AboutWindow()
 
-    legendwindow.render_legend()
-    mapwindow.render_map()
+    legend_window.render_legend()
+    map_window.render_map()
 
     screen.addstr(0, 0, "ASCII")
     screen.addstr(0, 5, " QGIS Enterprise", curses.color_pair(4))
     screen.refresh()
 
-    update_cmd_status(entercommandstr)
+    update_cmd_status(enter_command_text)
 
     if config.get('showhelp', True):
         show_help()
@@ -506,32 +553,35 @@ def main(screen):
         try:
             cmd = commands[message]
         except KeyError:
-            update_cmd_status("Unknown command: {}".format(message), colors['red'])
+            update_cmd_status(
+                    "Unknown command: {}".format(message), colors['red'])
             continue
 
-        global lastcmd
-        lastcmd = message
+        global last_command
+        last_command = message
 
         func = cmd()
         if not func:
-            update_cmd_status(entercommandstr)
+            update_cmd_status(enter_command_text)
             continue
 
         try:
-            qanda = func.send(None)
+            question_and_answer = func.send(None)
             while True:
                 edit.clear()
-                update_cmd_status(qanda.question, color=curses.color_pair(qanda.type))
+                update_cmd_status(
+                    question_and_answer.question,
+                    color=curses.color_pair(question_and_answer.type))
                 message = pad.edit(validate=handle_key_event).strip()
-                qanda = func.send(message)
+                question_and_answer = func.send(message)
         except StopIteration:
             edit.clear()
             edit.refresh()
-            update_cmd_status(entercommandstr)
+            update_cmd_status(enter_command_text)
 
 app = QGIS.init(guienabled=False)
 
 if __name__ == "__main__":
-    logging.info("Staring QGIS ASCII :)")
+    logging.info("Starting QGIS ASCII :)")
     logging.info("ASCII QGIS because we can")
     curses.wrapper(main)

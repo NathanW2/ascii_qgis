@@ -1,5 +1,5 @@
 #What the heck is this?
-A ASCII map thingo for QGIS projects
+An ASCII map thingo for QGIS projects
 
 ![](https://raw.githubusercontent.com/NathanW2/ascii_qgis/gh-pages/images/demoimage.png)
 

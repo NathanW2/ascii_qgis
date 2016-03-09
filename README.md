@@ -1,7 +1,8 @@
 #What the heck is this?
 An ASCII map thingo for QGIS projects
 
-![](https://raw.githubusercontent.com/NathanW2/ascii_qgis/gh-pages/images/demoimage.png)
+![](https://raw.githubusercontent.com/NathanW2/ascii_qgis/gh-pages/images/newrender.png)
+![](https://raw.githubusercontent.com/NathanW2/ascii_qgis/gh-pages/images/newrender2.png)
 
 # How do I run it
 - Edit the paths in the .config file

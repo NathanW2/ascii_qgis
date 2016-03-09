@@ -327,8 +327,8 @@ def generate_layers_ascii(setttings, width, height):
             rowdata = []
             for col in range(1, width - 1):
                 color = QColor(image.pixel(col, row))
-                # All features are black at the moment so just use this.
-                # Might just do non white in the future
+                # All non white is considered a feature.
+                # Should pull background colour from project file
                 if not color == QColor(255, 255, 255):
                     rowdata.append((char, colorpair))
                     rowdata.append((char, colorpair))
@@ -373,12 +373,12 @@ class Map():
         if project:
             settings = self.settings
             data = generate_layers_ascii(self.settings, width, height)
-            for row, rowdata in enumerate(data):
-                if row + 1 >= height:
+            for row, rowdata in enumerate(data, start=1):
+                if row >= height:
                     break
 
-                for col, celldata in enumerate(rowdata):
-                    if col + 1 >= width:
+                for col, celldata in enumerate(rowdata, start=1):
+                    if col >= width:
                         break
 
                     value, color = celldata[0], celldata[1]
@@ -388,7 +388,7 @@ class Map():
                         value = ' '
                     # else:
                     #     color = 0
-                    self.mapwin.addstr(row + 1, col + 1, value, curses.color_pair(color))
+                    self.mapwin.addstr(row, col, value, curses.color_pair(color))
 
         self.mapwin.refresh()
 

@@ -23,6 +23,7 @@ status = None
 edit = None
 pad = None
 legendwindow = None
+color_mode_enabled = True
 ascii_mode_enabled = False
 aboutwindow = None
 mapwindow = None
@@ -39,6 +40,27 @@ TOPBORDER = 4
 BOTTOMBORDER = 2
 
 config = {}
+commands = {}
+
+def escape_name(funcname):
+    """
+    Escape the name of the given function.
+    """
+    funcname = funcname.replace("_", "-")
+    funcname = funcname.replace(" ", "-")
+    return funcname.lower()
+
+
+def command(names=None, *args, **kwargs):
+    if not names:
+        names = []
+    def _command(func):
+        name = escape_name(func.__name__)
+        commands[name] = func
+        for name in names:
+            commands[name] = func
+        return func
+    return _command
 
 
 class AboutWindow():
@@ -121,6 +143,7 @@ class Legend():
         render_nodes(root, row, col)
         self.win.refresh()
 
+@command(names=['command-list'])
 def show_commands():
     cmds = "\n".join(commands)
     aboutwindow.display(title="Commands - ESC to close", content=cmds)
@@ -130,6 +153,7 @@ def show_commands():
     edit.clear()
     edit.refresh()
 
+@command(names=["help", "?"])
 def show_help():
     abouttxt = """
     YAY ASCII!
@@ -165,6 +189,7 @@ def show_help():
     edit.clear()
     edit.refresh()
 
+@command(names=['about', 'faq', 'wat!?'])
 def show_about():
     abouttxt = """
     > What the heck is this?
@@ -189,6 +214,7 @@ def show_about():
     edit.clear()
     edit.refresh()
 
+@command(names=['exit', 'quit'])
 def _exit():
     curses.endwin()
     sys.exit()
@@ -210,6 +236,7 @@ def _open_project(fullpath):
     return project
 
 
+@command(names=['load-project'])
 def open_project():
     project = yield QAndA(question="Which project to open?",type=QuestionTypes.QUESTION)
     fullpath = _resolve_project_path(project)
@@ -226,40 +253,27 @@ def open_project():
         legendwindow.render_legend()
         mapwindow.render_map()
 
-def ascii_mode():
-    answer = yield QAndA("Enable ascii rendering mode? Y/N", type=QuestionTypes.QUESTION)
-    while not answer or answer[0].upper() not in ['Y', 'N']:
-        answer = yield QAndA("Enable ascii rendering mode? Y/N", type=QuestionTypes.QUESTION)
-
+@command()
+def toggle_ascii_mode():
     global ascii_mode_enabled
-    if answer.upper() == "Y":
-        ascii_mode_enabled = True
-    else:
-        ascii_mode_enabled = False
+    ascii_mode_enabled = not ascii_mode_enabled
     mapwindow.render_map()
 
+@command()
+def toggle_color_mode():
+    global color_mode_enabled
+    color_mode_enabled = not color_mode_enabled
+    mapwindow.render_map()
+
+@command()
 def zoom_out():
     factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
     mapwindow.zoom_out(float(factor))
 
+@command()
 def zoom_in():
     factor = yield QAndA("By how much?", type=QuestionTypes.QUESTION)
     mapwindow.zoom_in(float(factor))
-
-
-commands = {
-    "open-project": open_project,
-    "exit": _exit,
-    "quit": _exit,
-    "?": show_help,
-    "help": show_help,
-    "about": show_about,
-    "faq": show_about,
-    "command-list": show_commands,
-    "zoom-out": zoom_out,
-    "zoom-in": zoom_in,
-    "ascii-map-mode": ascii_mode,
-}
 
 
 def get_pixel_value(pixels, x, y):
@@ -386,8 +400,10 @@ class Map():
                         color = 8
                     if not ascii_mode_enabled:
                         value = ' '
-                    # else:
-                    #     color = 0
+
+                    if not color_mode_enabled:
+                        color = 0
+
                     self.mapwin.addstr(row, col, value, curses.color_pair(color))
 
         self.mapwin.refresh()

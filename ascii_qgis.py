@@ -244,15 +244,18 @@ def _open_project(fullpath):
 
 @command(names=['load-project'])
 def open_project():
-    project = yield QAndA(question="Which project to open?", type=QAndA.QUESTION)
+    projectq = QAndA(question="Which project to open?", type=QAndA.QUESTION)
+    project = yield projectq
     fullpath = _resolve_project_path(project)
     while not _resolve_project_path(project):
-        project = yield QAndA(question="Couldn't find project {}. Check name".format(project), type=QAndA.QUESTIOnERROR)
+        projectq.type = QAndA.QUESTIOnERROR
+        project = yield projectq
         fullpath = _resolve_project_path(project)
 
-    answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QAndA.QUESTION)
+    answerq = QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QAndA.QUESTION)
+    answer = yield answerq
     while not answer or answer[0].upper() not in ['Y', 'N']:
-        answer = yield QAndA(question="Really load ({}) | Y/N ".format(fullpath),type=QAndA.QUESTIOnERROR)
+        answer = yield answerq
 
     if answer[0].upper() == "Y":
         _open_project(fullpath)

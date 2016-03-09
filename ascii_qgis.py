@@ -54,7 +54,10 @@ class AboutWindow():
         self.infowin.box()
         self.infowin.addstr(0, 0, title, curses.A_UNDERLINE | curses.A_BOLD)
         for count, line in enumerate(content.split('\n'), start=1):
-            self.infowin.addstr(count, 1, line)
+            try:
+                self.infowin.addstr(count, 1, line)
+            except:
+                pass
 
         self.infopanel.show()
         curses.panel.update_panels()
@@ -422,9 +425,11 @@ def update_cmd_status(message, color=None):
     if not color:
         color = curses.color_pair(1)
     status.clear()
-    status.addstr(0, 0, message, color)
-    status.refresh()
-
+    try:
+        status.addstr(0, 0, message, color)
+        status.refresh()
+    except:
+        pass
 
 colors = {
 }

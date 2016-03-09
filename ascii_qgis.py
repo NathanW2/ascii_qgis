@@ -242,6 +242,7 @@ def zoom_in():
 commands = {
     "open-project": open_project,
     "exit": _exit,
+    "quit": _exit,
     "?": show_help,
     "help": show_help,
     "about": show_about,

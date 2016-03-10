@@ -30,6 +30,13 @@ mapwindow = None
 canvas = None
 lastcmd = ''
 
+codes = [
+    '@', # Point
+    '.', # Line
+    '#', # Polygon
+    ' ', # Unsupported
+    ' ' # Unknown
+]
 
 class QAndA:
     QUESTION = 3
@@ -110,10 +117,17 @@ class Legend():
         def render_item(node, row, col):
             nodestr = str(node)
 
+            color = 0
+            char = ' '
             if isinstance(node, QgsLayerTreeLayer):
                 nodestr = "(L) " + node.layerName()
+                if ascii_mode_enabled:
+                    char = codes[node.layer().geometryType()]
+                if color_mode_enabled:
+                    color = layercolormapping.get(node.layerId(), 0)
             if isinstance(node, QgsLayerTreeGroup):
                 nodestr = "(G) " + node.name()
+
 
             state = "[ ]"
             if node.isVisible():
@@ -123,7 +137,7 @@ class Legend():
             if node.isExpanded():
                 expanded = '-'
 
-            name = "{} {} {}".format(expanded, state, nodestr)
+            name = "{} {} {} {}".format(expanded, state, char, nodestr)
 
             y, maxsize = self.win.getmaxyx()
             logging.info(name)
@@ -131,7 +145,18 @@ class Legend():
                 name = name[:maxsize - 2]
                 logging.info(name)
 
-            self.win.addstr(row, col, name)
+            part1 = "{} {}".format(expanded, state)
+            part2 = char * 2
+            part3 = "{}".format(nodestr)
+            logging.info(name)
+
+            part1offset = col + len(part1) + 1
+            part2offset = part1offset + len(part2) + 1
+
+            logging.info(color)
+            self.win.addstr(row, col, part1)
+            self.win.addstr(row, part1offset, part2, curses.color_pair(color))
+            self.win.addstr(row, part2offset, part3)
 
         def render_nodes(root, row, col):
             for node in root.children():
@@ -148,6 +173,25 @@ class Legend():
         col = 1
         render_nodes(root, row, col)
         self.win.refresh()
+
+
+layercolormapping = {}
+
+def assign_layer_colors():
+    """
+    Assign all the colors for each layer up front so we can use
+    it though the application.
+    """
+    import itertools
+    colors = itertools.cycle(range(11, curses.COLORS - 10))
+    layercolormapping.clear()
+    root = QgsProject.instance().layerTreeRoot()
+    layers = [node.layer() for node in root.findLayers()]
+    for layer in reversed(layers):
+        if not layer.type() == QgsMapLayer.VectorLayer:
+            continue
+        layercolormapping[layer.id()] = colors.next()
+
 
 @command(names=['command-list'])
 def show_commands():
@@ -259,6 +303,7 @@ def open_project():
 
     if answer[0].upper() == "Y":
         _open_project(fullpath)
+        assign_layer_colors()
         legendwindow.render_legend()
         mapwindow.render_map()
 
@@ -267,6 +312,7 @@ def toggle_ascii_mode():
     global ascii_mode_enabled
     ascii_mode_enabled = not ascii_mode_enabled
     mapwindow.render_map()
+    legendwindow.render_legend()
 
 @command()
 def toggle_color_mode():
@@ -275,6 +321,7 @@ def toggle_color_mode():
     global ascii_mode_enabled
     ascii_mode_enabled = not color_mode_enabled
     mapwindow.render_map()
+    legendwindow.render_legend()
 
 @command()
 def zoom_out():
@@ -324,16 +371,7 @@ def stack(layers, fill=(' ', 0)):
     return output_array
 
 def generate_layers_ascii(setttings, width, height):
-    codes = [
-        '@',
-        '.',
-        '#',
-        ' ',
-        ' '
-    ]
     # Should only do visible ones but meh
-    import itertools
-    colors = itertools.cycle(range(11, curses.COLORS - 10))
 
     layersdata = []
     root = QgsProject.instance().layerTreeRoot()
@@ -343,7 +381,8 @@ def generate_layers_ascii(setttings, width, height):
         if not layer.type() == QgsMapLayer.VectorLayer:
             continue
 
-        colorpair = colors.next()
+        colorpair = layercolormapping[layer.id()]
+
         char = codes[layer.geometryType()]
         logging.info("Using color pair {} for layer {} and char {}".format(colorpair, char, layer.name()))
         image = render_layer(setttings, layer, width, height)

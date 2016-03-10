@@ -148,7 +148,6 @@ class Legend():
             if node.isExpanded():
                 expanded = '-'
 
-
             # This could be made generic for reuse in other places
             parts = [
                 (expanded, 0),
@@ -170,20 +169,29 @@ class Legend():
                 if oversize:
                     break
 
-        def render_nodes(root, row, col):
-            for node in root.children():
-                row += 1
-                render_item(node, row, col)
+        def render_nodes(node):
+            depth = [1, 1]
+
+            def wrapped(box):
+                render_item(box, depth[0], depth[1])
+
+                if root.isExpanded():
+                    depth[1] += 1
+                    for child in box.children():
+                        depth[0] += 1
+                        wrapped(child)
+                    depth[1] -= 1
+
+            for child in node.children():
+                wrapped(child)
+                depth[0] += 1
 
         size = 30
         self.win.clear()
         self.win.box()
         self.win.addstr(0, size / 2, "Layers")
-        # Only top level for now
         root = QgsProject.instance().layerTreeRoot()
-        row = 1
-        col = 1
-        render_nodes(root, row, col)
+        render_nodes(root)
         self.win.refresh()
 
 
@@ -385,11 +393,11 @@ def stack(layers, fill=(' ', 0)):
 
 @timeme
 def generate_layers_ascii(setttings, width, height):
-    # Should only do visible ones but meh
-    layersdata = []
     root = QgsProject.instance().layerTreeRoot()
     layers = [node.layer() for node in root.findLayers()
               if node.layer().type() == QgsMapLayer.VectorLayer and node.isVisible()]
+
+    layersdata = []
     for layer in reversed(layers):
         colorpair = layercolormapping[layer.id()]
         char = codes[layer.geometryType()]

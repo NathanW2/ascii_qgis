@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import time
 import curses
 import curses.panel
 import os
@@ -37,6 +38,16 @@ codes = [
     ' ', # Unsupported
     ' ' # Unknown
 ]
+
+def timeme(func):
+    def wrap(*args, **kwargs):
+        time1 = time.time()
+        ret = func(*args, **kwargs)
+        time2 = time.time()
+        logging.info('%s function took %0.3f ms' % (func.func_name, (time2-time1)*1000.0))
+        return ret
+    return wrap
+
 
 class QAndA:
     QUESTION = 3
@@ -137,26 +148,27 @@ class Legend():
             if node.isExpanded():
                 expanded = '-'
 
-            name = "{} {} {} {}".format(expanded, state, char, nodestr)
 
+            # This could be made generic for reuse in other places
+            parts = [
+                (expanded, 0),
+                (state, 0),
+                (char * 2, color),
+                (nodestr, 0),
+            ]
+
+            currentx = col
             y, maxsize = self.win.getmaxyx()
-            logging.info(name)
-            if len(name) > maxsize - 2:
-                name = name[:maxsize - 2]
-                logging.info(name)
-
-            part1 = "{} {}".format(expanded, state)
-            part2 = char * 2
-            part3 = "{}".format(nodestr)
-            logging.info(name)
-
-            part1offset = col + len(part1) + 1
-            part2offset = part1offset + len(part2) + 1
-
-            logging.info(color)
-            self.win.addstr(row, col, part1)
-            self.win.addstr(row, part1offset, part2, curses.color_pair(color))
-            self.win.addstr(row, part2offset, part3)
+            for part, color in parts:
+                tempx = currentx + len(part)
+                oversize = tempx > maxsize - 1
+                if oversize:
+                    diff = tempx - (maxsize - 1)
+                    part = part[:-diff]
+                self.win.addstr(row, currentx, part, curses.color_pair(color))
+                currentx += len(part)
+                if oversize:
+                    break
 
         def render_nodes(root, row, col):
             for node in root.children():
@@ -351,6 +363,7 @@ def get_pixel_value(pixels, x, y):
     except IndexError:
         return " ", pair
 
+@timeme
 def stack(layers, fill=(' ', 0)):
     """
     Stack a bunch of arrays and return a single array.
@@ -370,21 +383,16 @@ def stack(layers, fill=(' ', 0)):
         output_array.append(o_row)
     return output_array
 
+@timeme
 def generate_layers_ascii(setttings, width, height):
     # Should only do visible ones but meh
-
     layersdata = []
     root = QgsProject.instance().layerTreeRoot()
-    layers = [node.layer() for node in root.findLayers()]
-    layers = reversed(layers)
-    for layer in layers:
-        if not layer.type() == QgsMapLayer.VectorLayer:
-            continue
-
+    layers = [node.layer() for node in root.findLayers()
+              if node.layer().type() == QgsMapLayer.VectorLayer and node.isVisible()]
+    for layer in reversed(layers):
         colorpair = layercolormapping[layer.id()]
-
         char = codes[layer.geometryType()]
-        logging.info("Using color pair {} for layer {} and char {}".format(colorpair, char, layer.name()))
         image = render_layer(setttings, layer, width, height)
         layerdata = []
         for row in range(1, height - 1):
@@ -404,6 +412,7 @@ def generate_layers_ascii(setttings, width, height):
     return stack(layersdata)
 
 
+@timeme
 def render_layer(settings, layer, width, height):
     settings.setLayers([layer.id()])
     settings.setFlags(settings.flags() ^ QgsMapSettings.Antialiasing)

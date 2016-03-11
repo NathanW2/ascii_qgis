@@ -123,6 +123,7 @@ class Legend():
     def __init__(self):
         y, x = scr.getmaxyx()
         self.win = curses.newwin(y - TOPBORDER, 30, BOTTOMBORDER, 0)
+        self.items = []
 
     def render_legend(self):
         def render_item(node, row, col):
@@ -168,6 +169,7 @@ class Legend():
                 currentx += len(part)
                 if oversize:
                     break
+            self.items.append((nodestr, row, col + len(expanded) + 1))
 
         def render_nodes(node):
             depth = [1, 1]
@@ -193,6 +195,39 @@ class Legend():
         root = QgsProject.instance().layerTreeRoot()
         render_nodes(root)
         self.win.refresh()
+
+    def focus(self):
+        def move_item(index):
+            try:
+                item = self.items[index]
+            except IndexError:
+                return
+            itemrow = item[1]
+            logging.info("Selected legend item {} at row {}".format(item[0], itemrow))
+            self.win.move(itemrow, item[2])
+
+        index = 0
+        maxindex = len(self.items)
+        move_item(index)
+        self.win.nodelay(1)
+        while True:
+            char = self.win.getch()
+            if char == -1:
+                continue
+
+            logging.info(char)
+            if char == curses.KEY_DOWN or char == 66:
+                logging.info("Down we go")
+                index += 1
+                if index > maxindex:
+                    index = maxindex
+                move_item(index)
+            if char == curses.KEY_UP or char == 65:
+                logging.info("Up we go")
+                index -= 1
+                if index < 0:
+                    index = 0
+                move_item(index)
 
 
 layercolormapping = {}
@@ -580,6 +615,9 @@ def handle_key_event(event):
 
     if event == PAGEUP:
         mapwindow.zoom_in(5)
+
+    if event == 12:
+        legendwindow.focus()
 
     if event == 9:
         logging.info("Calling auto complete on TAB key")

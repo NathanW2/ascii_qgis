@@ -10,7 +10,7 @@ from curses.textpad import Textbox, rectangle
 from qgis.core import QgsMapLayerRegistry, QgsProject, QgsMapRendererParallelJob, QgsLayerTreeGroup, QgsLayerTreeLayer, QgsRectangle, QgsPoint, QgsMapSettings, \
     QgsMapLayer, QGis
 from qgis.gui import QgsMapCanvas, QgsLayerTreeMapCanvasBridge
-from PyQt4.QtCore import QSize
+from PyQt4.QtCore import QSize, Qt
 from PyQt4.QtGui import QColor, QImage
 from parfait import QGIS, projects
 
@@ -30,6 +30,21 @@ aboutwindow = None
 mapwindow = None
 canvas = None
 lastcmd = ''
+
+if hasattr(curses, "CTL_UP"):
+    UP = curses.CTL_UP
+    DOWN = curses.CTL_DOWN
+    LEFT = curses.CTL_LEFT
+    RIGHT = curses.CTL_RIGHT
+    PAGEUP = curses.CTL_PGUP
+    PAGEDOWN = curses.CTL_PGDN
+else:
+    UP = 566
+    DOWN = 525
+    LEFT = 545
+    RIGHT = 560
+    PAGEUP = 555
+    PAGEDOWN = 550
 
 codes = [
     '@', # Point
@@ -131,12 +146,14 @@ class Legend():
 
             color = 0
             char = ' '
+            islayer = False
             if isinstance(node, QgsLayerTreeLayer):
                 nodestr = "(L) " + node.layerName()
                 if ascii_mode_enabled:
                     char = codes[node.layer().geometryType()]
                 if color_mode_enabled:
                     color = layercolormapping.get(node.layerId(), 0)
+                islayer = True
             if isinstance(node, QgsLayerTreeGroup):
                 nodestr = "(G) " + node.name()
 
@@ -145,9 +162,12 @@ class Legend():
             if node.isVisible():
                 state = "[x]"
 
-            expanded = '+'
-            if node.isExpanded():
-                expanded = '-'
+            expanded = ' '
+            if not islayer:
+                if node.isExpanded():
+                    expanded = '-'
+                else:
+                    expanded = '+'
 
             # This could be made generic for reuse in other places
             parts = [
@@ -169,15 +189,16 @@ class Legend():
                 currentx += len(part)
                 if oversize:
                     break
-            self.items.append((nodestr, row, col + len(expanded) + 1))
+            self.items.append((nodestr, row, col + len(expanded) + 1, node))
 
         def render_nodes(node):
+            self.items = []
             depth = [1, 1]
 
             def wrapped(box):
                 render_item(box, depth[0], depth[1])
 
-                if root.isExpanded():
+                if box.isExpanded():
                     depth[1] += 1
                     for child in box.children():
                         depth[0] += 1
@@ -207,7 +228,6 @@ class Legend():
             self.win.move(itemrow, item[2])
 
         index = 0
-        maxindex = len(self.items)
         move_item(index)
         self.win.nodelay(1)
         while True:
@@ -219,6 +239,7 @@ class Legend():
             if char == curses.KEY_DOWN or char == 66:
                 logging.info("Down we go")
                 index += 1
+                maxindex = len(self.items)
                 if index > maxindex:
                     index = maxindex
                 move_item(index)
@@ -228,6 +249,24 @@ class Legend():
                 if index < 0:
                     index = 0
                 move_item(index)
+            if char == 32:
+                item = self.items[index]
+                if item[3].isVisible():
+                    item[3].setVisible(Qt.Unchecked)
+                else:
+                    item[3].setVisible(Qt.Checked)
+                mapwindow.render_map()
+                self.render_legend()
+                move_item(index)
+            if char in (67, 68):
+                item = self.items[index]
+                # 67 seems to be left arrow here but not sure why it's not
+                # KEY_LEFT
+                close = char == 67
+                item[3].setExpanded(close)
+                self.render_legend()
+                move_item(index)
+
 
 
 layercolormapping = {}
@@ -464,7 +503,7 @@ def render_layer(settings, layer, width, height):
     job.start()
     job.waitForFinished()
     image = job.renderedImage()
-    image.save(r"/media/nathan/Data/dev/qgis-term/{}.jpg".format(layer.name()))
+    # image.save(r"/media/nathan/Data/dev/qgis-term/{}.jpg".format(layer.name()))
     return image
 
 class Map():
@@ -578,20 +617,6 @@ class Map():
             newpoint = QgsPoint(center.x() + dx, center.y() + 0)
             setCenter(newpoint)
 
-if hasattr(curses, "CTL_UP"):
-    UP = curses.CTL_UP
-    DOWN = curses.CTL_DOWN
-    LEFT = curses.CTL_LEFT
-    RIGHT = curses.CTL_RIGHT
-    PAGEUP = curses.CTL_PGUP
-    PAGEDOWN = curses.CTL_PGDN
-else:
-    UP = 566
-    DOWN = 525
-    LEFT = 545
-    RIGHT = 560
-    PAGEUP = 555
-    PAGEDOWN = 550
 
 def handle_key_event(event):
     # TAB

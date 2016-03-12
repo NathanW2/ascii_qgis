@@ -549,7 +549,7 @@ class Map():
                     break
 
                 for col, celldata in enumerate(rowdata, start=1):
-                    if col >= width:
+                    if col >= width - 1:
                         break
 
                     value, color = celldata[0], celldata[1]
